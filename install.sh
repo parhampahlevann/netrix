@@ -30,6 +30,21 @@ SUDO="$(need_root_cmd)"
 cleanup() { rm -rf "$WORKDIR"; }
 trap cleanup EXIT
 
+# When this script is run as `curl ... | bash`, stdin is the piped script
+# itself, not the terminal. Any interactive prompt (install.sh dialogs,
+# netrix-manager.py's menu) would hit EOF immediately. Reattach stdin to
+# the real controlling terminal before running anything interactive.
+run_interactive() {
+    if [ -r /dev/tty ]; then
+        "$@" < /dev/tty
+    else
+        err "No controlling terminal found; cannot run interactively: $*"
+        err "Download this script first and run it locally instead of piping it to bash, e.g.:"
+        err "  curl -fsSL -o install.sh https://raw.githubusercontent.com/parhampahlevann/netrix/main/install.sh && bash install.sh"
+        return 1
+    fi
+}
+
 # ---------- Dependencies ----------
 ensure_deps() {
     local missing=()
@@ -85,17 +100,17 @@ run_installer() {
     fi
     log "Running installer: $INSTALL_SCRIPT"
     chmod +x "$INSTALL_SCRIPT"
-    $SUDO bash "$INSTALL_SCRIPT"
+    run_interactive $SUDO bash "$INSTALL_SCRIPT"
 }
 
 # ---------- Launch manager menu ----------
 launch_manager() {
     log "Launching Netrix manager..."
     if command -v netrix-manager.py &>/dev/null; then
-        $SUDO netrix-manager.py
+        run_interactive $SUDO netrix-manager.py
     elif [ -f "$EXTRACT_DIR/netrix-manager.py" ]; then
         chmod +x "$EXTRACT_DIR/netrix-manager.py"
-        $SUDO "$EXTRACT_DIR/netrix-manager.py"
+        run_interactive $SUDO "$EXTRACT_DIR/netrix-manager.py"
     else
         err "netrix-manager.py not found on PATH or in the package."
         err "If install.sh placed it elsewhere, run it manually, e.g.: sudo netrix-manager.py"
